@@ -8,9 +8,12 @@ const server = express();
 server.use(express.json());
 server.use(cors());
 
+// #################### Custom Middleware ####################
+
 const sendUserError = (status, message, res) => {
     return res.status(status).json({ errorMessage: message });
 }
+
 const getResources = (helper, helperStr, req, res, altGetMethod) => {
     if (!req) {
         helper.get()
@@ -107,6 +110,58 @@ const postResources = (helper, helperStr, req, res) => {
         })
 }
 
+const putResources = (helper, helperStr, req, res) => {
+    let obj = {};
+    const { id } = req.params; 
+
+    if (helperStr === 'projects') {
+        const { name, description, completed } = req.body;
+
+        if (!name || !description || !completed) {
+            sendUserError(404, 'Please provide a name, description, and a completed boolean result for the project.', res);
+            return;
+        }
+        obj.name = name;
+        obj.description = description;
+        obj.completed = completed;
+    }
+    else if (helperStr === 'actions') {
+        const { project_id, description, notes, completed } = req.body;
+
+        if (!project_id || !description || !notes || !completed) {
+            sendUserError(404, 'Please provide a project id, description, notes, and a completed boolean result for the action.', res);
+            return;
+        }
+
+        obj.project_id = project_id;
+        obj.description = description;
+        obj.notes = notes;
+        obj.completed = completed;
+    }
+
+    helper.update(id, obj)
+        .then(update_response => {
+            if (update_response === 0) {
+                sendUserError(404, `The ${helperStr.slice(0, -1)} with the specified ID does not exist.`, res)
+                return;
+            }
+            else {
+                helper.get(id)
+                    .then(get_response => {
+                        res.json(get_response);
+                    })
+                    .catch(error => {
+                        sendUserError(404, `The ${helperStr.slice(0, -1)} with the specified ID does not exist.`, res);
+                    })
+            }
+        })
+        .catch(error => {
+            sendUserError(500, `The ${helperStr.slice(0, -1)} information could not be modified.`, res);
+        })
+}
+
+// #################### Endpoints ####################
+
 server.get('/api/projects', (req, res) => {
     getResources(projects, 'projects', null, res, null);
 });
@@ -134,5 +189,13 @@ server.post('/api/projects/', (req, res) => {
 server.post('/api/actions/', (req, res) => {
     postResources(actions, 'actions', req, res);
 });
+
+server.put('/api/projects/:id', (req, res) => {
+    putResources(projects, 'projects', req, res); 
+});
+
+server.put('/api/actions/:id', (req, res) => {
+    putResources(actions, 'actions', req, res); 
+}); 
 
 server.listen(port, () => console.log(`Server is running on port ${port}.`));
