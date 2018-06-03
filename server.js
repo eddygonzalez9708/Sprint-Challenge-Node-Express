@@ -19,7 +19,7 @@ const getResources = (helper, helperStr, req, res, altGetMethod) => {
         helper.get()
             .then(get_response => {
                 if (get_response.length === 0) {
-                    sendUserError(404, `There are no ${helperStr} in the database.`, res);
+                    return sendUserError(404, `There are no ${helperStr} in the database.`, res);
                 }
                 else {
                     res.json(get_response);
@@ -34,7 +34,7 @@ const getResources = (helper, helperStr, req, res, altGetMethod) => {
         helper.get(id)
             .then(get_response => {
                 if (!get_response) {
-                    sendUserError(404, `The ${helperStr} with the specified ID does not exist.`, res);
+                    return sendUserError(404, `The ${helperStr} with the specified ID does not exist.`, res);
                 }
                 else {
                     res.json(get_response);
@@ -49,7 +49,7 @@ const getResources = (helper, helperStr, req, res, altGetMethod) => {
         altGetMethod(id)
             .then(altGetMethod_response => {
                 if (altGetMethod_response.length === 0) {
-                    sendUserError(404, `There are no ${helperStr[0]} for the specified ${helperStr[1]} ID.`, res);
+                    return sendUserError(404, `There are no ${helperStr[0]} for the specified ${helperStr[1]} ID.`, res);
                 }
                 else {
                     res.json(altGetMethod_response);
@@ -67,9 +67,8 @@ const postResources = (helper, helperStr, req, res) => {
     if (helperStr === 'projects') {
         const { name, description, completed } = req.body;
 
-        if (!name || !description || !completed) {
-            sendUserError(404, 'Please provide a name, description, and a completed boolean result for the project.', res);
-            return;
+        if (!name || !description || (completed !== false && completed !== true)) {
+            return sendUserError(404, 'Please provide a name, description, and a completed boolean result for the project.', res);
         }
         obj.name = name;
         obj.description = description;
@@ -78,9 +77,8 @@ const postResources = (helper, helperStr, req, res) => {
     else if (helperStr === 'actions') {
         const { project_id, description, notes, completed } = req.body;
 
-        if (!project_id || !description || !notes || !completed) {
-            sendUserError(404, 'Please provide a project id, description, notes, and a completed boolean result for the action.', res);
-            return;
+        if (!project_id || !description || !notes || (completed !== false && completed !== true)) {
+            return sendUserError(404, 'Please provide a project id, description, notes, and a completed boolean result for the action.', res);
         }
 
         obj.project_id = project_id;
@@ -112,14 +110,13 @@ const postResources = (helper, helperStr, req, res) => {
 
 const putResources = (helper, helperStr, req, res) => {
     let obj = {};
-    const { id } = req.params; 
+    const { id } = req.params;
 
     if (helperStr === 'projects') {
         const { name, description, completed } = req.body;
 
-        if (!name || !description || !completed) {
-            sendUserError(404, 'Please provide a name, description, and a completed boolean result for the project.', res);
-            return;
+        if (!name || !description || (completed !== false && completed !== true)) {
+            return sendUserError(404, 'Please provide a name, description, and a completed boolean result for the project.', res);
         }
         obj.name = name;
         obj.description = description;
@@ -128,9 +125,8 @@ const putResources = (helper, helperStr, req, res) => {
     else if (helperStr === 'actions') {
         const { project_id, description, notes, completed } = req.body;
 
-        if (!project_id || !description || !notes || !completed) {
-            sendUserError(404, 'Please provide a project id, description, notes, and a completed boolean result for the action.', res);
-            return;
+        if (!project_id || !description || !notes || (completed !== false && completed !== true)) {
+            return sendUserError(404, 'Please provide a project id, description, notes, and a completed boolean result for the action.', res);
         }
 
         obj.project_id = project_id;
@@ -142,8 +138,7 @@ const putResources = (helper, helperStr, req, res) => {
     helper.update(id, obj)
         .then(update_response => {
             if (update_response === 0) {
-                sendUserError(404, `The ${helperStr.slice(0, -1)} with the specified ID does not exist.`, res)
-                return;
+                return sendUserError(404, `The ${helperStr.slice(0, -1)} with the specified ID does not exist.`, res);
             }
             else {
                 helper.get(id)
@@ -157,6 +152,45 @@ const putResources = (helper, helperStr, req, res) => {
         })
         .catch(error => {
             sendUserError(500, `The ${helperStr.slice(0, -1)} information could not be modified.`, res);
+        })
+}
+
+const deleteResources = (helper, helperStr, req, res) => {
+    let obj = {};
+    let del = {};
+    const { id } = req.params;
+
+    helper.get(id)
+        .then(get_response => {
+            del = get_response;
+            helper.remove(id)
+                .then(remove_response => {
+                    if (remove_response === 0) {
+                        return sendUserError(404, `The ${helperStr} with the specified ID does not not exist.`, res);
+                    }
+                    else {
+                        if (helperStr === 'project') {
+                            for (let i = 0; i < del.actions.length; i++) {
+                                actions.remove(del.actions[i].id)
+                                    .then(remove_response => {
+                                        if (remove_response === 0) {
+                                            return sendUserError(404, 'The action with the specified ID does not exist.', res);
+                                        }
+                                    })
+                                    .catch(error => {
+                                        return sendUserError(500, 'There was an error while deleting the acion(s) for the project.', res);
+                                    })
+                            }
+                        }
+                        res.json(del);
+                    }
+                })
+                .catch(error => {
+                    sendUserError(500, `The ${helperStr} information could not be removed.`, res);
+                })
+        })
+        .catch(error => {
+            sendUserError(404, `The ${helperStr} with the specified ID does not exist.`, res);
         })
 }
 
@@ -191,11 +225,19 @@ server.post('/api/actions/', (req, res) => {
 });
 
 server.put('/api/projects/:id', (req, res) => {
-    putResources(projects, 'projects', req, res); 
+    putResources(projects, 'projects', req, res);
 });
 
 server.put('/api/actions/:id', (req, res) => {
-    putResources(actions, 'actions', req, res); 
-}); 
+    putResources(actions, 'actions', req, res);
+});
+
+server.delete('/api/projects/:id', (req, res) => {
+    deleteResources(projects, 'project', req, res);
+});
+
+server.delete('/api/actions/:id', (req, res) => {
+    deleteResources(actions, 'action', req, res);
+})
 
 server.listen(port, () => console.log(`Server is running on port ${port}.`));
